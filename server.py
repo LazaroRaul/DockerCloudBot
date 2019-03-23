@@ -8,9 +8,9 @@ reposDB = tinydb.TinyDB("repos.json")
 userDB = tinydb.TinyDB("users.json")
 q = tinydb.Query()
 
-API_KEY
-BOT_HOST = f"/{API_KEY}/"
-BOT_URL = f"https://api.telegram.org/bot{API_KEY}/sendMessage"
+API_KEY = '<apikey>'
+BOT_HOST = "/%s/" % API_KEY 
+BOT_URL = "https://api.telegram.org/bot%s/sendMessage" % API_KEY
 
 
 class RequestHandler(BaseHTTPRequestHandler):
@@ -35,7 +35,7 @@ class RequestHandler(BaseHTTPRequestHandler):
     def sendInfo(self, repo, status):
         l = reposDB.search(q.repo == repo)
         for chat in l:
-            params = {'chat_id': chat['id'], 'text': f"Last build is '{status}'"}
+            params = {'chat_id': chat['id'], 'text': "Last build is '%s'" % status}
             requests.get(url=BOT_URL, params=params)
 
     def do_POST(self):
