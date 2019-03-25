@@ -3,13 +3,15 @@ import json
 import requests
 import telebot
 import tinydb
+import ssl
 
 reposDB = tinydb.TinyDB("repos.json")
 userDB = tinydb.TinyDB("users.json")
 q = tinydb.Query()
 
 API_KEY = '<apikey>'
-BOT_HOST = "/%s/" % API_KEY 
+BOT_HOST = "/%s" % API_KEY 
+DOCKER_HOST = "/docker"
 BOT_URL = "https://api.telegram.org/bot%s/sendMessage" % API_KEY
 
 
@@ -55,15 +57,21 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.addRepo(chat_id, text[6:], params)
             else:
                 requests.get(url=BOT_URL, params=params)
-        else:
+        elif self.path == DOCKER_HOST:
             hook = json.loads(json_string)
             repo = hook["push_data"]["pushed_at"]
             status = hook["repository"]["status"]
             self.sendInfo(repo, status)
+        else:
+            print("unknown connection")
 
 
-def run(addr='localhost', port=8000):
+def run(addr='0.0.0.0', port=8443):
+    #GENERATE AN SSL CERTIFICATE
+    # openssl genrsa -out key.pem 2048
+    # openssl req -new -x509 -days 3650 -key key.pem -out cert.pem
     server = HTTPServer((addr, port), RequestHandler)
+    httpd.socket = ssl.wrap_socket (httpd.socket, server_side=True, certfile='./cert.pem', keyfile='./key.pem', ssl_version=ssl.PROTOCOL_TLSv1)
     server.serve_forever()
 
 
