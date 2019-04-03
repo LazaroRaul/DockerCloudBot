@@ -57,15 +57,19 @@ class RequestHandler(BaseHTTPRequestHandler):
     def ShowRepos(self, chat_id, params):
         if self.isKnowUser(chat_id):
             l = reposDB.search(where('id') == chat_id)
-            repos = map(lambda x: x['repo'], l)
-            params = {'chat_id': chat_id, 'text': "\n".join(repos)}
-            requests.get(url=BOT_URL, params=params)
+            repos = list(map(lambda x: x['repo'], l))
+            params['text'] = "\n".join(repos) if len(repos) != 0 else "you don't have any repository yet"
+        else:
+            params['text'] = "You are not allow to do this action right now. Use /start and try again"
+        requests.get(url=BOT_URL, params=params)
 
     def DeleteRepo(chat_id, chat_id, repo, params):
         if self.isKnowUser(chat_id):
             reposDB.remove(reposDB.search(where('id') == chat_id and where('repo') == repo))
-            params = {'chat_id': chat_id, 'text': "removed"}
-            requests.get(url=BOT_URL, params=params)
+            params['text'] = "removed"
+        else:
+            params['text'] = "You are not allow to do this action right now. Use /start and try again"
+        requests.get(url=BOT_URL, params=params)
 
     def do_POST(self):
         json_string = self.rfile.read(int(self.headers['content-length']))
