@@ -22,7 +22,7 @@ Available commands:
 /delete - Delete repository
 /help - Print this message
 
-use https://dockerbot.simelo.tech:8443/tl as your Docker webhook to recive notifications
+Use https://dockerbot.simelo.tech:8443/tl as your Docker webhook to receive notifications
 '''
 
 
@@ -31,21 +31,10 @@ class RequestHandler(BaseHTTPRequestHandler):
     def isKnowUser(self, chat_id):
         return len(userDB.search(where('id') == chat_id)) != 0
 
-    def addUser(self, chat_id, params):
-        if not self.isKnowUser(chat_id):
+    def addUser(self, chat_id, params, add=True):
+        if add:
             userDB.insert({'id': chat_id})
-        params['text'] = "now you can use /repo <id> to recive your builds status"
-        requests.get(url=BOT_URL, params=params)
-
-    def addRepo(self, chat_id, repo, params):
-        if self.isKnowUser(chat_id):
-            if len(reposDB.search(where('id') == chat_id and where('repo') == repo)) == 0:
-               reposDB.insert({'id': chat_id, 'repo': repo})
-               params['text'] = "repository added correctly"
-            else:
-                params['text'] = "you already has that repository" 
-        else:
-            params['text'] = "You are not allow to do this action right now. Use /start and try again"
+        params['text'] = INFO
         requests.get(url=BOT_URL, params=params)
 
     def sendInfo(self, repo, status):
@@ -54,21 +43,45 @@ class RequestHandler(BaseHTTPRequestHandler):
             params = {'chat_id': chat['id'], 'text': "Last build on %s is '%s'" % (repo, status)}
             requests.get(url=BOT_URL, params=params)
 
-    def ShowRepos(self, chat_id, params):
-        if self.isKnowUser(chat_id):
-            l = reposDB.search(where('id') == chat_id)
-            repos = list(map(lambda x: x['repo'], l))
-            params['text'] = "\n".join(repos) if len(repos) != 0 else "you don't have any repository yet"
+    def botAction(self, chat_id, text, params):
+        if isKnowUser(chat_id):
+            if text == '/help' or text == '/start':
+                self.addUser(chat_id, params, False)
+            elif text[:6] == '/link ':
+                self.addRepo(chat_id, text[6:], params)
+            elif text == '/list':   
+                self.ShowRepos(chat_id, params)
+            elif text[:8] == '/delete ':   
+                self.DeleteRepo(chat_id, text[8:], params)
+            else
+                requests.get(url=BOT_URL, params=params)
+        elif text == '/help' or text == '/start':
+            self.addUser(chat_id, params)
         else:
             params['text'] = "You are not allow to do this action right now. Use /start and try again"
+            requests.get(url=BOT_URL, params=params)
+
+    def addRepo(self, chat_id, repo, params):
+        if len(reposDB.search(where('id') == chat_id and where('repo') == repo)) == 0:
+           reposDB.insert({'id': chat_id, 'repo': repo})
+           params['text'] = "repository added correctly"
+        else:
+            params['text'] = "you already has that repository" 
+        requests.get(url=BOT_URL, params=params)
+
+    def ShowRepos(self, chat_id, params):
+        l = reposDB.search(where('id') == chat_id)
+        repos = list(map(lambda x: x['repo'], l))
+        params['text'] = "\n".join(repos) if len(repos) != 0 else "you don't have any repository yet"
         requests.get(url=BOT_URL, params=params)
 
     def DeleteRepo(chat_id, chat_id, repo, params):
-        if self.isKnowUser(chat_id):
-            reposDB.remove(reposDB.search(where('id') == chat_id and where('repo') == repo))
-            params['text'] = "removed"
+        old = len(reposDB)
+        reposDB.remove(where('id') == chat_id and where('repo') == repo)
+        if old != len(reposDB):
+            params['text'] = "Repository removed"
         else:
-            params['text'] = "You are not allow to do this action right now. Use /start and try again"
+            params['text'] = "You don't have that repository"
         requests.get(url=BOT_URL, params=params)
 
     def do_POST(self):
@@ -83,20 +96,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             upd = telebot.types.Update.de_json(json_string.decode())
             text = upd.message.text
             chat_id = upd.message.chat.id
-            params = {'chat_id': chat_id, 'text': "Sorry, I'am not talkative"}
-            if '/start' in text:
-                self.addUser(chat_id, params)
-            elif '/help' in text:
-                params = {'chat_id': chat_id, 'text': INFO}
-                requests.get(url=BOT_URL, params=params)
-            elif '/link' in text:
-                self.addRepo(chat_id, text[6:], params)
-            elif '/list' in text:   
-                self.ShowRepos(chat_id, params)
-            elif '/delete' in text:   
-                self.DeleteRepo(chat_id, text[8:], params)
-            else:
-                requests.get(url=BOT_URL, params=params)
+            params = {'chat_id': chat_id, 'text': "Sorry, I'm not talkative"}
+            self.botAction(chat_id, text, params)
         elif self.path == DOCKER_HOST:
             print("docker connection")
             hook = json.loads(json_string)
