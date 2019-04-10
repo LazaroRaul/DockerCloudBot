@@ -99,8 +99,11 @@ class RequestHandler(BaseHTTPRequestHandler):
     def addRepo(self, chat_id, repo, params):
         if len(linkDB.search(where('id') == chat_id and where('repo') == repo)) == 0:
             linkDB.insert({'id': chat_id, 'repo': repo})
-            if len(reposDB.search(where('name') == repo)) != 0:
-                reposDB.insert({"name": repo, "id": "null", "status": "null"})
+            info = reposDB.search(where('name') == repo)
+            if len(info) == 0:
+                reposDB.insert({"name": repo, "id": "null", "status": "null", "cant":"1"})
+            else:
+                reposDB.update({"cant":str(int(info[0]["cant"]) + 1)}, where('name') == repo)
             params['text'] = "repository added correctly"
         else:
             params['text'] = "you already has that repository" 
@@ -117,6 +120,11 @@ class RequestHandler(BaseHTTPRequestHandler):
         linkDB.remove(where('id') == chat_id and where('repo') == repo)
         if old != len(linkDB):
             params['text'] = "Repository removed"
+            cant = reposDB.search(where('name') == repo)[0]["cant"] - 1
+            if cant > 0:
+                reposDB.update({"cant":str(cant)}, where('name') == repo)
+            else:
+                reposDB.remove(where('name') == repo)
         else:
             params['text'] = "You don't have that repository"
         requests.get(url=BOT_URL, params=params)
