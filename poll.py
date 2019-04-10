@@ -7,8 +7,11 @@ from time import sleep
 
 reposDB = TinyDB("repos.json")
 
-site = "https://cloud.docker.com/api/audit/v1/action/"
-p = {"include_related":"true", "limit":"2", "object":"/api/repo/v1/repository/%s/"}
+BOT = "https://dockerbot.simelo.tech:8443/update"
+SITE = "https://cloud.docker.com/api/audit/v1/action/"
+API = "/api/repo/v1/repository/%s/"
+params = {"include_related":"true", "limit":"2"}
+ARGS = '{"repo":"%s", "time":"%d", "build":"%s", "source":"%s", "commit":"%s", "tag":"%s", "action":"%s", "status":"%s", "uuid":"%s"}' 
 user = "<yourUser>"
 password = "<yourPassword>"
 date = '{}, {} {} {} {}:{}:{} {}'
@@ -21,8 +24,8 @@ def getUpdates():
     for repo in reposDB.all():
         print(repo)
         name = repo['name']
-        p["object"] = "/api/repo/v1/repository/%s/" % name
-        req = requests.get(url="https://cloud.docker.com/api/audit/v1/action/", params=p, auth=HTTPBasicAuth(user, password))
+        p["object"] = API % name
+        req = requests.get(url=SITE, params=p, auth=HTTPBasicAuth(user, password))
         if req.ok:
             print("ok")
             js = req.json()['objects'][0]
@@ -38,9 +41,8 @@ def getUpdates():
                 reposDB.update({'id':build, 'status':state}, where('name') == name)
                 start = js['created']
                 elapsed = elapsedSeconds(end) - elapsedSeconds(start)
-                body = '{"repo":"%s", "time":"%d", "build":"%s", "source":"%s", "commit":"%s", "tag":"%s", "action":"%s", "status":"%s", "uuid":"%s"}' 
-                body = body % (name, elapsed, build, js['source_repo'], commit, js['build_tag'], js['action'], state, js['uuid'])
-                requests.post(url="https://dockerbot.simelo.tech:8443/update", data=body)
+                body = ARGS % (name, elapsed, build, js['source_repo'], commit, js['build_tag'], js['action'], state, js['uuid'])
+                requests.post(url=, data=body)
 
 
 while True:
