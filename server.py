@@ -5,13 +5,20 @@ import telebot
 from tinydb import TinyDB, where
 import ssl
 
-reposDB = TinyDB("repos.json")
+reposDB = TinyDB("repo.json")
+linkDB = TinyDB("link.json")
 userDB = TinyDB("users.json")
 
 API_KEY = '<apikey>'
-BOT_HOST = "/%s" % API_KEY 
-DOCKER_HOST = "/tl"
+BOT_HOST = "/%s" % API_KEY
 BOT_URL = "https://api.telegram.org/bot%s/sendMessage" % API_KEY
+GH_COMMIT = "https://github.com/%s/commit/%s"
+GH_BRANCH = "https://github.com/%s/tree/%s"
+DCK_REPO = "https://hub.docker.com/r/%s"
+DCK_BLD = "https://cloud.docker.com/u/%s/repository/docker/%s/builds/%s"
+LINK = "[%s](%s)"
+
+EMOJIS = {'Success':u'\U00002705', 'Failed':u'\U00002757', 'Canceled':u'\U000023F9', 'whale': u'\U0001F433', "Queued":u'\U000023F0'}
 
 INFO = '''
 I'm a Docker Cloud Bot. I can notify you about builds of your repositories.
@@ -21,8 +28,6 @@ Available commands:
 /list - List all current repositories
 /delete - Delete repository
 /help - Print this message
-
-Use https://dockerbot.simelo.tech:8443/tl as your Docker webhook to receive notifications
 '''
 
 
@@ -37,14 +42,42 @@ class RequestHandler(BaseHTTPRequestHandler):
         params['text'] = INFO
         requests.get(url=BOT_URL, params=params)
 
-    def sendInfo(self, repo, status):
-        l = reposDB.search(where('repo') == repo)
-        for chat in l:
-            params = {'chat_id': chat['id'], 'text': "Last build on %s is '%s'" % (repo, status)}
+    def sendInfo(self, data):
+        repo = data['repo']
+        for chat in linkDB.search(where('repo') == repo):
+            action = data['action']
+            branch = action[action.index("'") + 1: action.rindex("'")]
+
+            commit = GH_COMMIT % (data['source'], data['commit'])
+            github = GH_BRANCH % (data['source'], branch)
+            docker = DCK_REPO % repo
+            build = DCK_BLD % (repo[:repo.index("/")], repo, data['uuid'])
+            
+            commitId = action[action.index("(") + 1: action.index(")")]
+            action = action[:action.index("(") + 1] + LINK % (commitId, commit) + action[action.index(")"):]
+            action = action[:action.index("'") + 1] + LINK % (branch, github) + action[action.rindex("'"):]
+            action = action.replace("Build in", "Build [[%s](%s)] in" % (data['uuid'][:8], build))
+
+            elapsed = int(data['time'])
+            h = elapsed // 3600
+            elapsed -= h * 3600
+            m = elapsed // 60
+            s = elapsed - m * 60
+            duration = ""
+            if h > 0:
+                duration += "%d h " % h
+            if m > 0:
+                duration += "%d min " % m
+            if s > 0:
+                duration += "%d sec " % s
+
+            msg = EMOJIS['whale'] + " " + EMOJIS[data['status']] 
+            msg += " [%s](%s):%s: \n%s \nResult %s in %s" % (repo, docker, data['tag'], action, data['status'], duration)
+            params['text'] = msg
             requests.get(url=BOT_URL, params=params)
 
     def botAction(self, chat_id, text, params):
-        if isKnowUser(chat_id):
+        if self.isKnowUser(chat_id):
             if text == '/help' or text == '/start':
                 self.addUser(chat_id, params, False)
             elif text[:6] == '/link ':
@@ -53,32 +86,36 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.ShowRepos(chat_id, params)
             elif text[:8] == '/delete ':   
                 self.DeleteRepo(chat_id, text[8:], params)
-            else
+            else:
                 requests.get(url=BOT_URL, params=params)
         elif text == '/help' or text == '/start':
             self.addUser(chat_id, params)
-        else:
+        elif text[:6] == '/link ' or text == '/list' or text[:8] == '/delete ':
             params['text'] = "You are not allow to do this action right now. Use /start and try again"
+            requests.get(url=BOT_URL, params=params)
+        else:
             requests.get(url=BOT_URL, params=params)
 
     def addRepo(self, chat_id, repo, params):
-        if len(reposDB.search(where('id') == chat_id and where('repo') == repo)) == 0:
-           reposDB.insert({'id': chat_id, 'repo': repo})
-           params['text'] = "repository added correctly"
+        if len(linkDB.search(where('id') == chat_id and where('repo') == repo)) == 0:
+            linkDB.insert({'id': chat_id, 'repo': repo})
+            if len(reposDB.search(where('name') == repo)) != 0:
+                reposDB.insert({"name": repo, "id": "null", "status": "null"})
+            params['text'] = "repository added correctly"
         else:
             params['text'] = "you already has that repository" 
         requests.get(url=BOT_URL, params=params)
 
     def ShowRepos(self, chat_id, params):
-        l = reposDB.search(where('id') == chat_id)
-        repos = list(map(lambda x: x['repo'], l))
+        l = linkDB.search(where('id') == chat_id)
+        repos = list(map(lambda x: LINK % (x['repo'], DCK_REPO % x['repo']), l))
         params['text'] = "\n".join(repos) if len(repos) != 0 else "you don't have any repository yet"
         requests.get(url=BOT_URL, params=params)
 
-    def DeleteRepo(chat_id, chat_id, repo, params):
-        old = len(reposDB)
-        reposDB.remove(where('id') == chat_id and where('repo') == repo)
-        if old != len(reposDB):
+    def DeleteRepo(self, chat_id, repo, params):
+        old = len(linkDB)
+        linkDB.remove(where('id') == chat_id and where('repo') == repo)
+        if old != len(linkDB):
             params['text'] = "Repository removed"
         else:
             params['text'] = "You don't have that repository"
@@ -96,14 +133,10 @@ class RequestHandler(BaseHTTPRequestHandler):
             upd = telebot.types.Update.de_json(json_string.decode())
             text = upd.message.text
             chat_id = upd.message.chat.id
-            params = {'chat_id': chat_id, 'text': "Sorry, I'm not talkative"}
+            params = {'chat_id': chat_id, 'text': "Sorry, I'm not talkative", "parse_mode":"Markdown"}
             self.botAction(chat_id, text, params)
-        elif self.path == DOCKER_HOST:
-            print("docker connection")
-            hook = json.loads(json_string)
-            repo = hook["repository"]["repo_name"]
-            status = hook["repository"]["status"]
-            self.sendInfo(repo, status)
+        elif self.path == '/update':
+            self.sendInfo(json.loads(json_string))
         else:
             print("unknown connection")
 
