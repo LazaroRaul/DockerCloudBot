@@ -9,8 +9,8 @@ reposDB = TinyDB("repos.json")
 
 site = "https://cloud.docker.com/api/audit/v1/action/"
 p = {"include_related":"true", "limit":"2", "object":"/api/repo/v1/repository/%s/"}
-user = "<yourUser"
-password = "yourPassword"
+user = "<yourUser>"
+password = "<yourPassword>"
 date = '{}, {} {} {} {}:{}:{} {}'
 
 def elapsedSeconds(data):
