@@ -120,7 +120,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         linkDB.remove(where('id') == chat_id and where('repo') == repo)
         if old != len(linkDB):
             params['text'] = "Repository removed"
-            cant = reposDB.search(where('name') == repo)[0]["cant"] - 1
+            cant = int(reposDB.search(where('name') == repo)[0]["cant"]) - 1
             if cant > 0:
                 reposDB.update({"cant":str(cant)}, where('name') == repo)
             else:
