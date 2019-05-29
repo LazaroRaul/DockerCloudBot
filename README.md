@@ -2,13 +2,13 @@
 
 A simple Telegram bot which will send you a notification with the status of each one of your linked Docker build's in the selected repositories.
 
-## - Python requierments
+## - Python requirements
 - tinydb
 - requests
 - telebot
 - parse
 
-This requierments are needed if you want to use the bot code 
+This requirements are needed if you want to use the bot's code 
 
 ## - Usage
 
